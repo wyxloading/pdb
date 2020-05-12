@@ -150,6 +150,16 @@ impl<'s, I> ItemInformation<'s, I>
 where
     I: ItemIndex,
 {
+    pub(crate) fn empty(stream: Stream<'s>) -> Self {
+        let header = Header::empty();
+        let _ph = PhantomData;
+        Self {
+            stream,
+            header,
+            _ph,
+        }
+    }
+
     /// Parses `TypeInformation` from raw stream data.
     pub(crate) fn parse(stream: Stream<'s>) -> Result<Self> {
         let mut buf = stream.parse_buffer();

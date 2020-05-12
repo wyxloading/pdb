@@ -112,6 +112,15 @@ impl<'s, S: Source<'s> + 's> PDB<'s, S> {
         IdInformation::parse(stream)
     }
 
+    pub fn id_information_new(&mut self, containIdStream : bool) -> Result<IdInformation<'s>> {
+        let stream = self.msf.get(IPI_STREAM, None)?;
+        if containIdStream {
+            IdInformation::parse(stream)
+        } else {
+            Ok(IdInformation::empty(stream))
+        }
+    }
+
     /// Retrieve the `DebugInformation` for this PDB.
     ///
     /// The `DebugInformation` object owns a `SourceView` for the debug information ("DBI") stream.

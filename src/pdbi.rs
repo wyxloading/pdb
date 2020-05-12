@@ -13,6 +13,16 @@ use crate::common::*;
 use crate::dbi::HeaderVersion;
 use crate::msf::*;
 
+const PdbRawFeatureSigVC110: u32 = 20091201;
+const PdbRawFeatureSigVC140: u32 = 20140508;
+const PdbRawFeatureSigNoTypeMerge: u32 = 0x4D544F4E;
+const PdbRawFeatureSigMinimalDebugInfo: u32 = 0x494E494D;
+
+const PdbRawFeatureNone: u32 = 0x0;
+const PdbRawFeatureContainsIdStream: u32 = 0x1;
+const PdbRawFeatureMinimalDebugInfo: u32 = 0x2;
+const PdbRawFeatureNoTypeMerging: u32 = 0x4;
+
 /// A PDB info stream header parsed from a stream.
 ///
 /// The [PDB information stream][1] contains the GUID and age fields that can be used to
@@ -43,13 +53,15 @@ pub struct PDBInformation<'s> {
     pub names_offset: usize,
     /// The size of the stream name data, in bytes.
     pub names_size: usize,
+    pub feature_signatures: Vec<u32>,
+    pub features: u32,
     stream: Stream<'s>,
 }
 
 impl<'s> PDBInformation<'s> {
     /// Parses a `PDBInformation` from raw stream data.
     pub(crate) fn parse(stream: Stream<'s>) -> Result<Self> {
-        let (version, signature, age, guid, names_size, names_offset) = {
+        let (version, signature, age, guid, names_size, names_offset, feature_signatures, features) = {
             let mut buf = stream.parse_buffer();
             let version = From::from(buf.parse_u32()?);
             let signature = buf.parse_u32()?;
@@ -63,7 +75,33 @@ impl<'s> PDBInformation<'s> {
             .unwrap();
             let names_size = buf.parse_u32()? as usize;
             let names_offset = buf.pos();
-            (version, signature, age, guid, names_size, names_offset)
+
+            let mut features_reader = stream.parse_buffer();
+            let mut feature_signatures = Vec::new();
+            let mut features = PdbRawFeatureNone;
+            features_reader.seek(names_size + names_offset);
+            let mut should_stop = false;
+            while !should_stop && !features_reader.is_empty() {
+                let sig = features_reader.parse_u32()?;
+                match sig {
+                    PdbRawFeatureSigVC110 => {
+                        features |= PdbRawFeatureContainsIdStream;
+                        should_stop = true
+                    }
+                    PdbRawFeatureSigVC140 => {
+                        features |= PdbRawFeatureContainsIdStream
+                    }
+                    PdbRawFeatureSigNoTypeMerge => {
+                        features |= PdbRawFeatureNoTypeMerging
+                    }
+                    PdbRawFeatureSigMinimalDebugInfo => {
+                        features |= PdbRawFeatureMinimalDebugInfo
+                    }
+                    _ => {}
+                };
+                feature_signatures.push(sig);
+            }
+            (version, signature, age, guid, names_size, names_offset, feature_signatures, features)
         };
 
         Ok(PDBInformation {
@@ -74,6 +112,8 @@ impl<'s> PDBInformation<'s> {
             names_size,
             names_offset,
             stream,
+            feature_signatures,
+            features,
         })
     }
 
@@ -145,6 +185,10 @@ impl<'s> PDBInformation<'s> {
             names_reader
         };
         Ok(StreamNames { buf, names })
+    }
+
+    pub fn containsIdStream(&self) -> bool {
+        self.features & PdbRawFeatureContainsIdStream > 0
     }
 }
 
