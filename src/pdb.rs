@@ -112,9 +112,13 @@ impl<'s, S: Source<'s> + 's> PDB<'s, S> {
         IdInformation::parse(stream)
     }
 
-    pub fn id_information_new(&mut self, containIdStream : bool) -> Result<IdInformation<'s>> {
+    /// Retrieve the `IdInformation` for this PDB.
+    ///
+    /// Should pass a contain_id_stream flag which gets from
+    /// PDBInformation.contains_id_stream()
+    pub fn id_information_new(&mut self, contain_id_stream : bool) -> Result<IdInformation<'s>> {
         let stream = self.msf.get(IPI_STREAM, None)?;
-        if containIdStream {
+        if contain_id_stream {
             IdInformation::parse(stream)
         } else {
             Ok(IdInformation::empty(stream))

@@ -13,15 +13,15 @@ use crate::common::*;
 use crate::dbi::HeaderVersion;
 use crate::msf::*;
 
-const PdbRawFeatureSigVC110: u32 = 20091201;
-const PdbRawFeatureSigVC140: u32 = 20140508;
-const PdbRawFeatureSigNoTypeMerge: u32 = 0x4D544F4E;
-const PdbRawFeatureSigMinimalDebugInfo: u32 = 0x494E494D;
+const PDB_RAW_FEATURE_SIG_VC110: u32 = 20091201;
+const PDB_RAW_FEATURE_SIG_VC140: u32 = 20140508;
+const PDB_RAW_FEATURE_SIG_NOTYPEMERGE: u32 = 0x4D544F4E;
+const PDB_RAW_FEATURE_SIG_MINIMALDEBUGINFO: u32 = 0x494E494D;
 
-const PdbRawFeatureNone: u32 = 0x0;
-const PdbRawFeatureContainsIdStream: u32 = 0x1;
-const PdbRawFeatureMinimalDebugInfo: u32 = 0x2;
-const PdbRawFeatureNoTypeMerging: u32 = 0x4;
+const PDB_RAW_FEATURE_NONE: u32 = 0x0;
+const PDB_RAW_FEATURE_CONTAINSIDSTREAM: u32 = 0x1;
+const PDB_RAW_FEATURE_MINIMALDEBUGINFO: u32 = 0x2;
+const PDB_RAW_FEATURE_NOTYPEMERGING: u32 = 0x4;
 
 /// A PDB info stream header parsed from a stream.
 ///
@@ -53,7 +53,9 @@ pub struct PDBInformation<'s> {
     pub names_offset: usize,
     /// The size of the stream name data, in bytes.
     pub names_size: usize,
+    /// The feature signature list
     pub feature_signatures: Vec<u32>,
+    /// The features flag
     pub features: u32,
     stream: Stream<'s>,
 }
@@ -78,24 +80,25 @@ impl<'s> PDBInformation<'s> {
 
             let mut features_reader = stream.parse_buffer();
             let mut feature_signatures = Vec::new();
-            let mut features = PdbRawFeatureNone;
+            let mut features = PDB_RAW_FEATURE_NONE;
             features_reader.seek(names_size + names_offset);
+            println!("sig len: {}", features_reader.len());
             let mut should_stop = false;
             while !should_stop && !features_reader.is_empty() {
                 let sig = features_reader.parse_u32()?;
                 match sig {
-                    PdbRawFeatureSigVC110 => {
-                        features |= PdbRawFeatureContainsIdStream;
+                    PDB_RAW_FEATURE_SIG_VC110 => {
+                        features |= PDB_RAW_FEATURE_CONTAINSIDSTREAM;
                         should_stop = true
                     }
-                    PdbRawFeatureSigVC140 => {
-                        features |= PdbRawFeatureContainsIdStream
+                    PDB_RAW_FEATURE_SIG_VC140 => {
+                        features |= PDB_RAW_FEATURE_CONTAINSIDSTREAM
                     }
-                    PdbRawFeatureSigNoTypeMerge => {
-                        features |= PdbRawFeatureNoTypeMerging
+                    PDB_RAW_FEATURE_SIG_NOTYPEMERGE => {
+                        features |= PDB_RAW_FEATURE_NOTYPEMERGING
                     }
-                    PdbRawFeatureSigMinimalDebugInfo => {
-                        features |= PdbRawFeatureMinimalDebugInfo
+                    PDB_RAW_FEATURE_SIG_MINIMALDEBUGINFO => {
+                        features |= PDB_RAW_FEATURE_MINIMALDEBUGINFO
                     }
                     _ => {}
                 };
@@ -187,8 +190,9 @@ impl<'s> PDBInformation<'s> {
         Ok(StreamNames { buf, names })
     }
 
-    pub fn containsIdStream(&self) -> bool {
-        self.features & PdbRawFeatureContainsIdStream > 0
+    /// Check the pdb features that if it contains id stream
+    pub fn contains_id_stream(&self) -> bool {
+        self.features & PDB_RAW_FEATURE_CONTAINSIDSTREAM > 0
     }
 }
 
