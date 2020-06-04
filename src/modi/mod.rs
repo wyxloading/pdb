@@ -244,9 +244,11 @@ impl<'a> LineProgram<'a> {
     }
 
     /// Looks up file information for the specified file.
-    pub fn get_file_info(&self, offset: FileIndex) -> Result<FileInfo<'a>> {
+    pub fn get_file_info(&self, offset: FileIndex) -> Result<Option<FileInfo<'a>>> {
         match self.inner {
-            LineProgramInner::C13(ref inner) => inner.get_file_info(offset),
+            LineProgramInner::C13(ref inner) => {
+                inner.get_file_info(offset)
+            },
         }
     }
 }

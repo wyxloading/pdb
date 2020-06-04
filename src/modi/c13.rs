@@ -86,21 +86,18 @@ struct DebugSubsection<'a> {
 #[derive(Clone, Debug, Default)]
 struct DebugSubsectionIterator<'a> {
     buf: ParseBuffer<'a>,
+    done: bool
 }
 
 impl<'a> DebugSubsectionIterator<'a> {
     fn new(data: &'a [u8]) -> Self {
         Self {
             buf: ParseBuffer::from(data),
+            done: false,
         }
     }
-}
 
-impl<'a> FallibleIterator for DebugSubsectionIterator<'a> {
-    type Item = DebugSubsection<'a>;
-    type Error = Error;
-
-    fn next(&mut self) -> Result<Option<Self::Item>> {
+    fn read(&mut self) -> Result<Option<DebugSubsection<'a>>> {
         while !self.buf.is_empty() {
             let header = self.buf.parse::<DebugSubsectionHeader>()?;
             let data = self.buf.take(header.len())?;
@@ -111,7 +108,24 @@ impl<'a> FallibleIterator for DebugSubsectionIterator<'a> {
 
             return Ok(Some(DebugSubsection { kind, data }));
         }
+        Ok(None)
+    }
+}
 
+impl<'a> FallibleIterator for DebugSubsectionIterator<'a> {
+    type Item = DebugSubsection<'a>;
+    type Error = Error;
+
+    fn next(&mut self) -> Result<Option<Self::Item>> {
+        if !self.done {
+            return match self.read() {
+                Ok(sec) => Ok(sec),
+                Err(_) => {
+                    self.done = true; // stop iterating
+                    Ok(None)
+                }
+            }
+        }
         Ok(None)
     }
 }
@@ -1328,18 +1342,17 @@ impl<'a> LineProgram<'a> {
         }
     }
 
-    pub(crate) fn get_file_info(&self, index: FileIndex) -> Result<FileInfo<'a>> {
+    pub(crate) fn get_file_info(&self, index: FileIndex) -> Result<Option<FileInfo<'a>>> {
         // The file index actually contains the byte offset value into the file_checksums
         // subsection. Therefore, treat it as the offset.
         let mut entries = self.file_checksums.entries_at_offset(index)?;
-        let entry = entries
+        Ok(entries
             .next()?
-            .ok_or_else(|| Error::InvalidFileChecksumOffset(index.0))?;
-
-        Ok(FileInfo {
-            name: entry.name,
-            checksum: entry.checksum,
-        })
+            .and_then(|entry| Some(FileInfo {
+                name: entry.name,
+                checksum: entry.checksum,
+            }))
+            .or(None)) // silently consume error
     }
 }
 

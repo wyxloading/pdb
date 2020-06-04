@@ -38,9 +38,10 @@ fn dump_pdb(filename: &str) -> pdb::Result<()> {
                 let mut lines = program.lines_at_offset(proc.offset);
                 while let Some(line_info) = lines.next()? {
                     let rva = line_info.offset.to_rva(&address_map).expect("invalid rva");
-                    let file_info = program.get_file_info(line_info.file_index)?;
-                    let file_name = file_info.name.to_string_lossy(&string_table)?;
-                    println!("  {} {}:{}", rva, file_name, line_info.line_start);
+                    if let Some(file_info) = program.get_file_info(line_info.file_index)? {
+                        let file_name = file_info.name.to_string_lossy(&string_table)?;
+                        println!("  {} {}:{}", rva, file_name, line_info.line_start);
+                    }
                 }
             }
         }
