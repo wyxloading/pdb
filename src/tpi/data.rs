@@ -36,6 +36,7 @@ pub enum TypeData<'t> {
     FieldList(FieldList<'t>),
     ArgumentList(ArgumentList),
     MethodList(MethodList),
+    VirtualFunctionTableShape(VirtualFunctionTableShape),
 }
 
 impl<'t> TypeData<'t> {
@@ -323,8 +324,19 @@ pub(crate) fn parse_type_data<'t>(mut buf: &mut ParseBuffer<'t>) -> Result<TypeD
 
         // https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L1819-L1823
         LF_VTSHAPE => {
-            // TODO
-            Err(Error::UnimplementedTypeKind(leaf))
+            let _count: u16 = buf.parse()?;
+            let mut desc: Vec<u8> = Vec::new();
+            loop {
+                let b: u8 = buf.parse()?;
+                desc.push(b);
+                if buf.is_empty() {
+                    break
+                }
+            }
+            Ok(TypeData::VirtualFunctionTableShape(VirtualFunctionTableShape{
+                count: _count,
+                desc: desc,
+            }))
         }
 
         // https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L1825-L1837
@@ -1040,6 +1052,13 @@ pub struct MethodListEntry {
     pub attributes: FieldAttributes,
     pub method_type: TypeIndex,
     pub vtable_offset: Option<u32>,
+}
+
+/// Virtual function table shape
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VirtualFunctionTableShape {
+    pub count: u16,
+    pub desc: Vec<u8>,
 }
 
 /*

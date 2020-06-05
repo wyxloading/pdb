@@ -61,8 +61,17 @@ pub trait SourceView<'s>: Drop + fmt::Debug {
 }
 
 #[derive(Clone)]
-struct ReadView {
+pub(crate) struct ReadView {
     bytes: Vec<u8>,
+}
+
+impl ReadView {
+    pub(crate) fn empty() -> Self {
+        let v = Vec::new();
+        Self {
+            bytes: v,
+        }
+    }
 }
 
 impl fmt::Debug for ReadView {

@@ -15,6 +15,7 @@ use crate::source::*;
 
 mod page_list;
 use self::page_list::PageList;
+use crate::ReadView;
 
 type PageNumber = u32;
 
@@ -351,6 +352,13 @@ pub struct Stream<'s> {
 }
 
 impl<'s> Stream<'s> {
+    pub(crate) fn empty() -> Self {
+        let v = ReadView::empty();
+        Self {
+            source_view: Box::new(v),
+        }
+    }
+
     #[inline]
     pub(crate) fn parse_buffer(&self) -> ParseBuffer<'_> {
         let slice = self.source_view.as_slice();
