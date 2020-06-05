@@ -82,7 +82,6 @@ impl<'s> PDBInformation<'s> {
             let mut feature_signatures = Vec::new();
             let mut features = PDB_RAW_FEATURE_NONE;
             features_reader.seek(names_size + names_offset);
-            println!("sig len: {}", features_reader.len());
             let mut should_stop = false;
             while !should_stop && !features_reader.is_empty() {
                 let sig = features_reader.parse_u32()?;
