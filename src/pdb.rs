@@ -186,7 +186,9 @@ impl<'s, S: Source<'s> + 's> PDB<'s, S> {
         // open the appropriate stream, assuming that it is always present.
         let stream = self
             .raw_stream(dbi_header.symbol_records_stream)?
-            .ok_or(Error::GlobalSymbolsNotFound)?;
+            // .ok_or(Error::GlobalSymbolsNotFound)?;
+            // support no dbi stream
+            .unwrap_or(Stream::empty());
 
         SymbolTable::parse(stream)
     }

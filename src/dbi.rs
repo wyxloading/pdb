@@ -208,6 +208,9 @@ impl DBIHeader {
     }
 
     fn parse_buf(buf: &mut ParseBuffer<'_>) -> Result<Self> {
+        if buf.len() < 1 {
+            return Ok(DBIHeader::empty())
+        }
         let header = DBIHeader {
             signature: buf.parse_u32()?,
             version: From::from(buf.parse_u32()?),
@@ -241,6 +244,31 @@ impl DBIHeader {
         }
 
         Ok(header)
+    }
+
+    fn empty() -> Self {
+        Self {
+            signature: 0,
+            version: HeaderVersion::OtherValue(0),
+            age: 0,
+            gs_symbols_stream: StreamIndex(0xffff),
+            internal_version: 0,
+            ps_symbols_stream: StreamIndex(0xffff),
+            pdb_dll_build_version: 0,
+            symbol_records_stream: StreamIndex(0xffff),
+            pdb_dll_rbld_version: 0,
+            module_list_size: 0,
+            section_contribution_size: 0,
+            section_map_size: 0,
+            file_info_size: 0,
+            type_server_map_size: 0,
+            mfc_type_server_index: 0,
+            debug_header_size: 0,
+            ec_substream_size: 0,
+            flags: 0,
+            machine_type: 0,
+            reserved: 0,
+        }
     }
 }
 
@@ -557,8 +585,18 @@ pub struct DBISectionContributionIter<'c> {
 
 impl<'c> DBISectionContributionIter<'c> {
     fn parse(mut buf: ParseBuffer<'c>) -> Result<Self> {
+        if buf.is_empty() {
+            return Ok(Self::empty());
+        }
         let version = buf.parse_u32()?.into();
         Ok(Self { buf, version })
+    }
+
+    fn empty() -> Self {
+        Self {
+            buf: ParseBuffer::default(),
+            version: DBISectionContributionStreamVersion::OtherValue(0),
+        }
     }
 }
 
