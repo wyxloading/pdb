@@ -136,7 +136,11 @@ impl<'s, S: Source<'s> + 's> PDB<'s, S> {
     /// * `Error::PageReferenceOutOfRange` if the PDB file seems corrupt
     /// * `Error::UnimplementedFeature` if the debug information header predates ~1995
     pub fn debug_information(&mut self) -> Result<DebugInformation<'s>> {
-        let stream = self.msf.get(DBI_STREAM, None)?;
+        let stream = match self.msf.get(DBI_STREAM, None) {
+            Ok(stream) => stream,
+            Err(Error::StreamNotFound(_)) => Stream::empty(),
+            Err(e) => return Err(e),
+        };
         let debug_info = DebugInformation::parse(stream)?;
 
         // Grab its header, since we need that for unrelated operations
@@ -151,7 +155,11 @@ impl<'s, S: Source<'s> + 's> PDB<'s, S> {
         }
 
         // get just the first little bit of the DBI stream
-        let stream = self.msf.get(DBI_STREAM, Some(1024))?;
+        let stream = match self.msf.get(DBI_STREAM, Some(1024)) {
+            Ok(stream) => stream,
+            Err(Error::StreamNotFound(_)) => Stream::empty(),
+            Err(e) => return Err(e),
+        };
         let header = DBIHeader::parse(stream)?;
 
         self.dbi_header = Some(header);
