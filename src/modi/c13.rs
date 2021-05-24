@@ -36,7 +36,7 @@ enum DebugSubsectionKind {
 
 impl DebugSubsectionKind {
     fn parse(value: u32) -> Result<Option<Self>> {
-        if value >= 0xf1 && value <= 0xfd {
+        if (0xf1..=0xfd).contains(&value) {
             Ok(Some(unsafe { std::mem::transmute(value) }))
         } else if value == constants::DEBUG_S_IGNORE {
             Ok(None)
@@ -365,8 +365,8 @@ impl LineNumberHeader {
         // that they are not confused with actual line number entries.
         let start_line = self.flags & 0x00ff_ffff;
         let marker = match start_line {
-            0xfee_fee => Some(LineMarkerKind::DoNotStepOnto),
-            0xf00_f00 => Some(LineMarkerKind::DoNotStepInto),
+            0xfeefee => Some(LineMarkerKind::DoNotStepOnto),
+            0xf00f00 => Some(LineMarkerKind::DoNotStepInto),
             _ => None,
         };
 
@@ -677,8 +677,8 @@ struct DebugFileChecksumsSubsection<'a> {
 
 impl<'a> DebugFileChecksumsSubsection<'a> {
     /// Creates a new file checksums subsection.
-    fn parse(data: &'a [u8]) -> Result<Self> {
-        Ok(Self { data })
+    fn new(data: &'a [u8]) -> Self {
+        Self { data }
     }
 
     /// Returns an iterator over all file checksum entries.
@@ -736,8 +736,7 @@ impl<'a> FallibleIterator for CrossScopeImportModuleIter<'a> {
         let count = self.buf.parse::<u32>()? as usize;
 
         let data = self.buf.take(count * mem::size_of::<u32>())?;
-        let imports =
-            cast_aligned(data).ok_or_else(|| Error::InvalidStreamLength("CrossScopeImports"))?;
+        let imports = cast_aligned(data).ok_or(Error::InvalidStreamLength("CrossScopeImports"))?;
 
         Ok(Some(CrossScopeImportModule { name, imports }))
     }
@@ -749,8 +748,8 @@ struct DebugCrossScopeImportsSubsection<'a> {
 }
 
 impl<'a> DebugCrossScopeImportsSubsection<'a> {
-    fn parse(data: &'a [u8]) -> Result<Self> {
-        Ok(Self { data })
+    fn new(data: &'a [u8]) -> Self {
+        Self { data }
     }
 
     fn modules(self) -> CrossScopeImportModuleIter<'a> {
@@ -782,7 +781,7 @@ impl<'a> CrossModuleImports<'a> {
             .map(|sec| sec.data);
 
         match import_data {
-            Some(d) => Self::from_section(DebugCrossScopeImportsSubsection::parse(d)?),
+            Some(d) => Self::from_section(DebugCrossScopeImportsSubsection::new(d)),
             None => Ok(Self::default()),
         }
     }
@@ -814,11 +813,11 @@ impl<'a> CrossModuleImports<'a> {
         let module = self
             .modules
             .get(module_index)
-            .ok_or_else(|| Error::CrossModuleRefNotFound(raw_index))?;
+            .ok_or(Error::CrossModuleRefNotFound(raw_index))?;
 
         let local_index = module
             .get(import_index)
-            .ok_or_else(|| Error::CrossModuleRefNotFound(raw_index))?;
+            .ok_or(Error::CrossModuleRefNotFound(raw_index))?;
 
         Ok(CrossModuleRef(module.name, local_index))
     }
@@ -908,8 +907,7 @@ impl<'a> DebugCrossScopeExportsSubsection<'a> {
     }
 }
 
-/// Iterator returned by
-/// [`CrossModuleExports::exports`](struct.CrossModuleExports.html#method.exports).
+/// Iterator returned by [`CrossModuleExports::exports`].
 #[derive(Clone, Debug)]
 pub struct CrossModuleExportIter<'a> {
     exports: slice::Iter<'a, RawCrossScopeExport>,
@@ -932,9 +930,8 @@ impl<'a> FallibleIterator for CrossModuleExportIter<'a> {
 
 /// A table of exports declared by this module.
 ///
-/// Other modules can import types and ids from this module by using [cross module references].
-///
-/// [cross module references]: trait.ItemIndex.html#method.is_cross_module
+/// Other modules can import types and ids from this module by using [cross module
+/// references](ItemIndex::is_cross_module).
 #[derive(Clone, Debug, Default)]
 pub struct CrossModuleExports {
     raw_exports: Vec<RawCrossScopeExport>,
@@ -978,9 +975,10 @@ impl CrossModuleExports {
 
     /// Resolves the global index of the given cross module import's local index.
     ///
-    /// The global index can be used to retrieve items from the [`TypeInformation`] or
-    /// [`IdInformation`] streams. If the given local index is not listed in the export list, this
-    /// function returns `Ok(None)`.
+    /// The global index can be used to retrieve items from the
+    /// [`TypeInformation`](crate::TypeInformation) or [`IdInformation`](crate::IdInformation)
+    /// streams. If the given local index is not listed in the export list, this function returns
+    /// `Ok(None)`.
     pub fn resolve_import<I>(&self, local_index: Local<I>) -> Result<Option<I>>
     where
         I: ItemIndex,
@@ -1297,7 +1295,7 @@ impl<'a> LineProgram<'a> {
             .map(|sec| sec.data);
 
         let file_checksums = match checksums_data {
-            Some(d) => DebugFileChecksumsSubsection::parse(d)?,
+            Some(d) => DebugFileChecksumsSubsection::new(d),
             None => DebugFileChecksumsSubsection::default(),
         };
 
@@ -1348,11 +1346,10 @@ impl<'a> LineProgram<'a> {
         let mut entries = self.file_checksums.entries_at_offset(index)?;
         Ok(entries
             .next()?
-            .and_then(|entry| Some(FileInfo {
+            .map(|entry| FileInfo {
                 name: entry.name,
                 checksum: entry.checksum,
-            }))
-            .or(None)) // silently consume error
+            })) // silently swallow error
     }
 }
 
@@ -1637,8 +1634,7 @@ mod tests {
 
     #[test]
     fn test_parse_cross_section_imports() {
-        let sec = DebugCrossScopeImportsSubsection::parse(&CROSS_MODULE_IMPORT_DATA.0)
-            .expect("parse imports");
+        let sec = DebugCrossScopeImportsSubsection::new(&CROSS_MODULE_IMPORT_DATA.0);
 
         let modules: Vec<_> = sec.modules().collect().expect("collect imports");
         assert_eq!(modules.len(), 2);
@@ -1651,8 +1647,7 @@ mod tests {
 
     #[test]
     fn test_resolve_cross_module_import() {
-        let sec = DebugCrossScopeImportsSubsection::parse(&CROSS_MODULE_IMPORT_DATA.0)
-            .expect("parse imports");
+        let sec = DebugCrossScopeImportsSubsection::new(&CROSS_MODULE_IMPORT_DATA.0);
 
         let imports = CrossModuleImports::from_section(sec).expect("parse section");
         let cross_ref = imports
@@ -1671,8 +1666,7 @@ mod tests {
 
     #[test]
     fn test_resolve_cross_module_import2() {
-        let sec = DebugCrossScopeImportsSubsection::parse(&CROSS_MODULE_IMPORT_DATA.0)
-            .expect("parse imports");
+        let sec = DebugCrossScopeImportsSubsection::new(&CROSS_MODULE_IMPORT_DATA.0);
 
         let imports = CrossModuleImports::from_section(sec).expect("parse section");
         let cross_ref = imports

@@ -22,12 +22,12 @@ pub struct SourceSlice {
 
 /// The `pdb` crate accesses PDB files via the `pdb::Source` trait.
 ///
-/// This library is written with zero-copy in mind. `Source`s provide `SourceView`s which need not
+/// This library is written with zero-copy in mind. `Source`s provide [`SourceView`]s which need not
 /// outlive their parent, supporting implementations of e.g. memory mapped files.
 ///
 /// PDB files are "multi-stream files" (MSF) under the hood. MSFs have various layers of
 /// indirection, but ultimately the MSF code asks a `Source` to view a series of
-/// [`{ offset, size }` records](struct.SourceSlice.html), which the `Source` provides as a
+/// [`{ offset, size }` records](SourceSlice), which the `Source` provides as a
 /// contiguous `&[u8]`.
 ///
 /// # Default
@@ -40,8 +40,8 @@ pub struct SourceSlice {
 /// # Alignment
 ///
 /// The requested offsets will always be aligned to the MSF's page size, which is always a power of
-/// two and is usually (but not always) 4096 bytes. The requested sizes will also be multiples of the
-/// page size, except for the size of the final `SourceSlice`, which may be smaller.
+/// two and is usually (but not always) 4096 bytes. The requested sizes will also be multiples of
+/// the page size, except for the size of the final `SourceSlice`, which may be smaller.
 ///
 /// PDB files are specified as always being a multiple of the page size, so `Source` implementations
 /// are free to e.g. map whole pages and return a sub-slice of the requested length.
@@ -55,7 +55,7 @@ pub trait Source<'s>: fmt::Debug {
 }
 
 /// An owned, droppable, read-only view of the source file which can be referenced as a byte slice.
-pub trait SourceView<'s>: Drop + fmt::Debug {
+pub trait SourceView<'s>: fmt::Debug {
     /// Returns a view to the raw data.
     fn as_slice(&self) -> &[u8];
 }
@@ -86,18 +86,12 @@ impl SourceView<'_> for ReadView {
     }
 }
 
-impl Drop for ReadView {
-    fn drop(&mut self) {
-        // no-op
-    }
-}
-
 impl<'s, T> Source<'s> for T
 where
     T: io::Read + io::Seek + fmt::Debug + 's,
 {
     fn view(&mut self, slices: &[SourceSlice]) -> Result<Box<dyn SourceView<'s>>, io::Error> {
-        let len = slices.iter().fold(0 as usize, |acc, s| acc + s.size);
+        let len = slices.iter().fold(0, |acc, s| acc + s.size);
 
         let mut v = ReadView {
             bytes: Vec::with_capacity(len),

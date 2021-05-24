@@ -108,6 +108,7 @@ struct Class<'p> {
 }
 
 impl<'p> Class<'p> {
+    #[allow(clippy::unnecessary_wraps)]
     fn add_derived_from(
         &mut self,
         _: &pdb::TypeFinder<'p>,
@@ -392,7 +393,7 @@ impl<'p> Enum<'p> {
         match type_finder.find(type_index)?.parse()? {
             pdb::TypeData::FieldList(data) => {
                 for field in &data.fields {
-                    self.add_field(type_finder, field, needed_types)?;
+                    self.add_field(type_finder, field, needed_types);
                 }
 
                 if let Some(continuation) = data.continuation {
@@ -412,12 +413,7 @@ impl<'p> Enum<'p> {
         Ok(())
     }
 
-    fn add_field(
-        &mut self,
-        _: &pdb::TypeFinder<'p>,
-        field: &pdb::TypeData<'p>,
-        _: &mut TypeSet,
-    ) -> pdb::Result<()> {
+    fn add_field(&mut self, _: &pdb::TypeFinder<'p>, field: &pdb::TypeData<'p>, _: &mut TypeSet) {
         // ignore everything else even though that's sad
         if let pdb::TypeData::Enumerate(ref data) = field {
             self.values.push(EnumValue {
@@ -425,8 +421,6 @@ impl<'p> Enum<'p> {
                 value: data.value,
             });
         }
-
-        Ok(())
     }
 }
 
@@ -619,10 +613,7 @@ fn write_class(filename: &str, class_name: &str) -> pdb::Result<()> {
     // add all the needed types iteratively until we're done
     loop {
         // get the last element in needed_types without holding an immutable borrow
-        let last = match needed_types.iter().next_back() {
-            Some(n) => Some(*n),
-            None => None,
-        };
+        let last = needed_types.iter().next_back().map(|n| *n);
 
         if let Some(type_index) = last {
             // remove it
@@ -658,7 +649,7 @@ fn main() {
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => panic!(f.to_string()),
+        Err(f) => panic!("{}", f.to_string()),
     };
 
     let (filename, class_name) = if matches.free.len() == 2 {

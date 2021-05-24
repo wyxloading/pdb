@@ -17,6 +17,7 @@ mod annotations;
 mod constants;
 
 use self::constants::*;
+pub use self::constants::{CPUType, SourceLanguage};
 
 pub use self::annotations::*;
 
@@ -68,24 +69,49 @@ impl<'t> Symbol<'t> {
     /// If `true`, this symbol has a `parent` and an `end` field, which contains the offset of the
     /// corrsponding end symbol.
     pub fn starts_scope(&self) -> bool {
-        match self.raw_kind() {
-            S_GPROC16 | S_GPROC32 | S_GPROC32_ST | S_GPROCMIPS | S_GPROCMIPS_ST | S_GPROCIA64
-            | S_GPROCIA64_ST | S_LPROC16 | S_LPROC32 | S_LPROC32_ST | S_LPROC32_DPC
-            | S_LPROCMIPS | S_LPROCMIPS_ST | S_LPROCIA64 | S_LPROCIA64_ST | S_LPROC32_DPC_ID
-            | S_GPROC32_ID | S_GPROCMIPS_ID | S_GPROCIA64_ID | S_BLOCK16 | S_BLOCK32
-            | S_BLOCK32_ST | S_WITH16 | S_WITH32 | S_WITH32_ST | S_THUNK16 | S_THUNK32
-            | S_THUNK32_ST | S_SEPCODE | S_GMANPROC | S_GMANPROC_ST | S_LMANPROC
-            | S_LMANPROC_ST | S_INLINESITE | S_INLINESITE2 => true,
-            _ => false,
-        }
+        matches!(
+            self.raw_kind(),
+            S_GPROC16
+                | S_GPROC32
+                | S_GPROC32_ST
+                | S_GPROCMIPS
+                | S_GPROCMIPS_ST
+                | S_GPROCIA64
+                | S_GPROCIA64_ST
+                | S_LPROC16
+                | S_LPROC32
+                | S_LPROC32_ST
+                | S_LPROC32_DPC
+                | S_LPROCMIPS
+                | S_LPROCMIPS_ST
+                | S_LPROCIA64
+                | S_LPROCIA64_ST
+                | S_LPROC32_DPC_ID
+                | S_GPROC32_ID
+                | S_GPROCMIPS_ID
+                | S_GPROCIA64_ID
+                | S_BLOCK16
+                | S_BLOCK32
+                | S_BLOCK32_ST
+                | S_WITH16
+                | S_WITH32
+                | S_WITH32_ST
+                | S_THUNK16
+                | S_THUNK32
+                | S_THUNK32_ST
+                | S_SEPCODE
+                | S_GMANPROC
+                | S_GMANPROC_ST
+                | S_LMANPROC
+                | S_LMANPROC_ST
+                | S_INLINESITE
+                | S_INLINESITE2
+        )
     }
 
     /// Returns whether this symbol declares the end of a scope.
     pub fn ends_scope(&self) -> bool {
-        match self.raw_kind() {
-            S_END | S_PROC_ID_END | S_INLINESITE_END => true,
-            _ => false,
-        }
+        matches!(self.raw_kind(), S_END | S_PROC_ID_END | S_INLINESITE_END)
     }
 }
 
@@ -138,8 +164,7 @@ fn parse_optional_index(buf: &mut ParseBuffer<'_>) -> Result<Option<SymbolIndex>
 //   https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/cvdump/dumpsym7.cpp#L264
 
 /// Information parsed from a [`Symbol`] record.
-///
-/// [`Symbol`]: struct.Symbol.html
+#[non_exhaustive]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SymbolData<'t> {
     /// End of a scope, such as a procedure.
@@ -166,7 +191,7 @@ pub enum SymbolData<'t> {
     CompileFlags(CompileFlagsSymbol<'t>),
     /// A using namespace directive.
     UsingNamespace(UsingNamespaceSymbol<'t>),
-    /// Reference to a [`ProcedureSymbol`](struct.ProcedureSymbol.html).
+    /// Reference to a [`ProcedureSymbol`].
     ProcedureReference(ProcedureReferenceSymbol<'t>),
     /// Reference to an imported variable.
     DataReference(DataReferenceSymbol<'t>),
@@ -423,18 +448,12 @@ impl<'t> TryFromCtx<'t, SymbolKind> for DataSymbol<'t> {
     fn try_from_ctx(this: &'t [u8], kind: SymbolKind) -> Result<(Self, usize)> {
         let mut buf = ParseBuffer::from(this);
 
-        let global = match kind {
-            S_GDATA32 | S_GDATA32_ST | S_GMANDATA | S_GMANDATA_ST => true,
-            _ => false,
-        };
-        let managed = match kind {
-            S_LMANDATA | S_LMANDATA_ST | S_GMANDATA | S_GMANDATA_ST => true,
-            _ => false,
-        };
-
         let symbol = DataSymbol {
-            global,
-            managed,
+            global: matches!(kind, S_GDATA32 | S_GDATA32_ST | S_GMANDATA | S_GMANDATA_ST),
+            managed: matches!(
+                kind,
+                S_LMANDATA | S_LMANDATA_ST | S_GMANDATA | S_GMANDATA_ST
+            ),
             type_index: buf.parse()?,
             offset: buf.parse()?,
             name: parse_symbol_name(&mut buf, kind)?,
@@ -453,7 +472,7 @@ pub struct ProcedureReferenceSymbol<'t> {
     pub global: bool,
     /// SUC of the name.
     pub sum_name: u32,
-    /// Symbol index of the referenced [`ProcedureSymbol`](struct.ProcedureSymbol.html).
+    /// Symbol index of the referenced [`ProcedureSymbol`].
     ///
     /// Note that this symbol might be located in a different module.
     pub symbol_index: SymbolIndex,
@@ -469,13 +488,8 @@ impl<'t> TryFromCtx<'t, SymbolKind> for ProcedureReferenceSymbol<'t> {
     fn try_from_ctx(this: &'t [u8], kind: SymbolKind) -> Result<(Self, usize)> {
         let mut buf = ParseBuffer::from(this);
 
-        let global = match kind {
-            S_PROCREF | S_PROCREF_ST => true,
-            _ => false,
-        };
-
         let symbol = ProcedureReferenceSymbol {
-            global,
+            global: matches!(kind, S_PROCREF | S_PROCREF_ST),
             sum_name: buf.parse()?,
             symbol_index: buf.parse()?,
             module: buf.parse()?,
@@ -493,7 +507,7 @@ impl<'t> TryFromCtx<'t, SymbolKind> for ProcedureReferenceSymbol<'t> {
 pub struct DataReferenceSymbol<'t> {
     /// SUC of the name.
     pub sum_name: u32,
-    /// Symbol index of the referenced [`DataSymbol`](struct.DataSymbol.html).
+    /// Symbol index of the referenced [`DataSymbol`].
     ///
     /// Note that this symbol might be located in a different module.
     pub symbol_index: SymbolIndex,
@@ -635,13 +649,8 @@ impl<'t> TryFromCtx<'t, SymbolKind> for ThreadStorageSymbol<'t> {
     fn try_from_ctx(this: &'t [u8], kind: SymbolKind) -> Result<(Self, usize)> {
         let mut buf = ParseBuffer::from(this);
 
-        let global = match kind {
-            S_GTHREAD32 | S_GTHREAD32_ST => true,
-            _ => false,
-        };
-
         let symbol = ThreadStorageSymbol {
-            global,
+            global: matches!(kind, S_GTHREAD32 | S_GTHREAD32_ST),
             type_index: buf.parse()?,
             offset: buf.parse()?,
             name: parse_symbol_name(&mut buf, kind)?,
@@ -662,6 +671,7 @@ const CV_PFLAG_NOINLINE: u8 = 0x40;
 const CV_PFLAG_OPTDBGINFO: u8 = 0x80;
 
 /// Flags of a [`ProcedureSymbol`](struct.ProcedureSymbol).
+#[non_exhaustive]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ProcedureFlags {
     /// Frame pointer is present (not omitted).
@@ -748,19 +758,9 @@ impl<'t> TryFromCtx<'t, SymbolKind> for ProcedureSymbol<'t> {
     fn try_from_ctx(this: &'t [u8], kind: SymbolKind) -> Result<(Self, usize)> {
         let mut buf = ParseBuffer::from(this);
 
-        let global = match kind {
-            S_GPROC32 | S_GPROC32_ST | S_GPROC32_ID => true,
-            _ => false,
-        };
-
-        let dpc = match kind {
-            S_LPROC32_DPC | S_LPROC32_DPC_ID => true,
-            _ => false,
-        };
-
         let symbol = ProcedureSymbol {
-            global,
-            dpc,
+            global: matches!(kind, S_GPROC32 | S_GPROC32_ST | S_GPROC32_ID),
+            dpc: matches!(kind, S_LPROC32_DPC | S_LPROC32_DPC_ID),
             parent: parse_optional_index(&mut buf)?,
             end: buf.parse()?,
             next: parse_optional_index(&mut buf)?,
@@ -785,8 +785,6 @@ pub struct InlineSiteSymbol<'t> {
     /// Index of the parent function.
     ///
     /// This might either be a [`ProcedureSymbol`] or another `InlineSiteSymbol`.
-    ///
-    /// [`ProcedureSymbol`]: struct.ProcedureSymbol.html
     pub parent: Option<SymbolIndex>,
     /// The end symbol of this callsite.
     pub end: SymbolIndex,
@@ -897,32 +895,33 @@ impl<'t> TryFromCtx<'t, bool> for CompilerVersion {
 }
 
 /// Compile flags declared in `CompileFlagsSymbol`.
+#[non_exhaustive]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CompileFlags {
     /// Compiled for edit and continue.
-    edit_and_continue: bool,
+    pub edit_and_continue: bool,
     /// Compiled without debugging info.
-    no_debug_info: bool,
+    pub no_debug_info: bool,
     /// Compiled with `LTCG`.
-    link_time_codegen: bool,
+    pub link_time_codegen: bool,
     /// Compiled with `/bzalign`.
-    no_data_align: bool,
+    pub no_data_align: bool,
     /// Managed code or data is present.
-    managed: bool,
+    pub managed: bool,
     /// Compiled with `/GS`.
-    security_checks: bool,
+    pub security_checks: bool,
     /// Compiled with `/hotpatch`.
-    hot_patch: bool,
+    pub hot_patch: bool,
     /// Compiled with `CvtCIL`.
-    cvtcil: bool,
+    pub cvtcil: bool,
     /// This is a MSIL .NET Module.
-    msil_module: bool,
+    pub msil_module: bool,
     /// Compiled with `/sdl`.
-    sdl: bool,
+    pub sdl: bool,
     /// Compiled with `/ltcg:pgo` or `pgo:`.
-    pgo: bool,
+    pub pgo: bool,
     /// This is a .exp module.
-    exp_module: bool,
+    pub exp_module: bool,
 }
 
 impl<'t> TryFromCtx<'t, SymbolKind> for CompileFlags {
@@ -1028,7 +1027,8 @@ const CV_LVARFLAG_ISOPTIMIZEDOUT: u16 = 0x80;
 const CV_LVARFLAG_ISENREG_GLOB: u16 = 0x100;
 const CV_LVARFLAG_ISENREG_STAT: u16 = 0x200;
 
-/// Flags for a [`LocalSymbol`](struct.LocalSymbol.html).
+/// Flags for a [`LocalSymbol`].
+#[non_exhaustive]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LocalVariableFlags {
     /// Variable is a parameter.
@@ -1107,7 +1107,8 @@ impl<'t> TryFromCtx<'t, SymbolKind> for LocalSymbol<'t> {
 }
 
 // https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4456
-/// Flags of an [`ExportSymbol`](struct.ExportSymbol.html).
+/// Flags of an [`ExportSymbol`].
+#[non_exhaustive]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ExportSymbolFlags {
     /// An exported constant.
@@ -1278,6 +1279,7 @@ pub struct ThunkAdjustor<'t> {
 }
 
 /// A thunk kind
+#[non_exhaustive]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ThunkKind<'t> {
     /// Standard thunk
@@ -1359,7 +1361,8 @@ impl<'t> TryFromCtx<'t, SymbolKind> for ThunkSymbol<'t> {
 const CV_SEPCODEFLAG_IS_LEXICAL_SCOPE: u32 = 0x01;
 const CV_SEPCODEFLAG_RETURNS_TO_PARENT: u32 = 0x02;
 
-/// Flags for a [`SeparatedCodeSymbol`](struct.SeparatedCodeSymbol.html).
+/// Flags for a [`SeparatedCodeSymbol`].
+#[non_exhaustive]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SeparatedCodeFlags {
     /// S_SEPCODE doubles as lexical scope.
@@ -1476,8 +1479,8 @@ pub struct SymbolTable<'s> {
 
 impl<'s> SymbolTable<'s> {
     /// Parses a symbol table from raw stream data.
-    pub(crate) fn parse(stream: Stream<'s>) -> Result<Self> {
-        Ok(SymbolTable { stream })
+    pub(crate) fn new(stream: Stream<'s>) -> Self {
+        SymbolTable { stream }
     }
 
     /// Returns an iterator that can traverse the symbol table in sequential order.

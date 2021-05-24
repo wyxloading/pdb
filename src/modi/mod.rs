@@ -31,15 +31,8 @@ pub struct ModuleInfo<'s> {
 
 impl<'s> ModuleInfo<'s> {
     /// Parses a `ModuleInfo` from it's Module info stream data.
-    pub(crate) fn parse(stream: Stream<'s>, module: &Module<'_>) -> Result<Self> {
+    pub(crate) fn parse(stream: Stream<'s>, module: &Module<'_>) -> Self {
         let info = module.info();
-
-        let mut buf = stream.parse_buffer();
-        if buf.parse_u32()? != constants::CV_SIGNATURE_C13 {
-            return Err(Error::UnimplementedFeature(
-                "Unsupported module info format",
-            ));
-        }
 
         let lines_size = if info.lines_size > 0 {
             LinesSize::C11(info.lines_size as usize)
@@ -48,11 +41,11 @@ impl<'s> ModuleInfo<'s> {
         };
 
         let symbols_size = info.symbols_size as usize;
-        Ok(ModuleInfo {
+        ModuleInfo {
             stream,
             symbols_size,
             lines_size,
-        })
+        }
     }
 
     fn lines_data(&self, size: usize) -> &[u8] {
@@ -64,7 +57,14 @@ impl<'s> ModuleInfo<'s> {
     pub fn symbols(&self) -> Result<SymbolIter<'_>> {
         let mut buf = self.stream.parse_buffer();
         buf.truncate(self.symbols_size)?;
-        buf.parse_u32()?;
+        if self.symbols_size > 0 {
+            let sig = buf.parse_u32()?;
+            if sig != constants::CV_SIGNATURE_C13 {
+                return Err(Error::UnimplementedFeature(
+                    "Unsupported symbol data format",
+                ));
+            }
+        }
         Ok(SymbolIter::new(buf))
     }
 
@@ -143,7 +143,7 @@ impl PartialEq for FileChecksum<'_> {
 /// Information record on a source file.
 #[derive(Clone, Debug, PartialEq)]
 pub struct FileInfo<'a> {
-    /// Reference to the file name in the [string table](struct.StringTable.html).
+    /// Reference to the file name in the [`StringTable`](crate::StringTable).
     pub name: StringRef,
 
     /// Checksum of the file contents.
@@ -235,7 +235,7 @@ impl<'a> LineProgram<'a> {
     /// Note that line records are not guaranteed to be ordered by source code offset. If a
     /// monotonic order by `PdbInternalSectionOffset` or `Rva` is required, the lines have to be
     /// sorted manually.
-    pub fn lines_at_offset(&self, offset: PdbInternalSectionOffset) -> LineIterator {
+    pub fn lines_at_offset(&self, offset: PdbInternalSectionOffset) -> LineIterator<'_> {
         match self.inner {
             LineProgramInner::C13(ref inner) => LineIterator {
                 inner: LineIteratorInner::C13(inner.lines_at_offset(offset)),
@@ -315,12 +315,8 @@ impl<'a> FallibleIterator for FileIterator<'a> {
 
 /// Named reference to a [`Module`].
 ///
-/// The name stored in the [`StringTable`] corresponds to the name of the module as returned by
-/// [`Module::module_name`].
-///
-/// [`Module`]: struct.Module.html
-/// [`Module::module_name`]: struct.Module.html#method.module_name
-/// [`StringTable`]: struct.StringTable.html
+/// The name stored in the [`StringTable`](crate::StringTable) corresponds to the name of the module
+/// as returned by [`Module::module_name`].
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ModuleRef(pub StringRef);
 
@@ -333,8 +329,6 @@ impl fmt::Display for ModuleRef {
 /// Reference to a local type or id in another module.
 ///
 /// See [`ItemIndex::is_cross_module`] for more information.
-///
-/// [`ItemIndex::is_cross_module`]: trait.ItemIndex.html#method.is_cross_module
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct CrossModuleRef<I: ItemIndex>(pub ModuleRef, pub Local<I>);
 
@@ -344,8 +338,8 @@ pub struct CrossModuleRef<I: ItemIndex>(pub ModuleRef, pub Local<I>);
 /// imports subsection.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CrossModuleExport {
-    /// A cross module export of a [`Type`](type.Type.html).
+    /// A cross module export of a [`Type`](crate::Type).
     Type(Local<TypeIndex>, TypeIndex),
-    /// A cross module export of an [`Id`](type.Id.html).
+    /// A cross module export of an [`Id`](crate::Id).
     Id(Local<IdIndex>, IdIndex),
 }

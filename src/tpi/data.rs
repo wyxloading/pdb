@@ -12,6 +12,7 @@ use crate::tpi::constants::*;
 use crate::tpi::primitive::*;
 
 /// Encapsulates parsed data about a `Type`.
+#[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypeData<'t> {
     Primitive(PrimitiveType),
@@ -81,6 +82,27 @@ pub(crate) fn parse_type_data<'t>(mut buf: &mut ParseBuffer<'t>) -> Result<TypeD
                 fields: parse_optional_type_index(&mut buf)?,
                 derived_from: parse_optional_type_index(&mut buf)?,
                 vtable_shape: parse_optional_type_index(&mut buf)?,
+                size: parse_unsigned(&mut buf)? as u16,
+                name: parse_string(leaf, buf)?,
+                unique_name: None,
+            };
+
+            if class.properties.has_unique_name() {
+                class.unique_name = Some(parse_string(leaf, buf)?);
+            }
+
+            Ok(TypeData::Class(class))
+        }
+
+        // https://github.com/microsoft/microsoft-pdb/issues/50#issuecomment-737890766
+        LF_STRUCTURE19 => {
+            let mut class = ClassType {
+                kind: ClassKind::Struct,
+                properties: TypeProperties(buf.parse_u32()? as u16),
+                fields: parse_optional_type_index(&mut buf)?,
+                derived_from: parse_optional_type_index(&mut buf)?,
+                vtable_shape: parse_optional_type_index(&mut buf)?,
+                count: buf.parse_u16()?,
                 size: parse_unsigned(&mut buf)? as u16,
                 name: parse_string(leaf, buf)?,
                 unique_name: None,
@@ -445,7 +467,7 @@ pub(crate) fn parse_type_data<'t>(mut buf: &mut ParseBuffer<'t>) -> Result<TypeD
 }
 
 #[inline]
-fn parse_optional_type_index<'t>(buf: &mut ParseBuffer<'t>) -> Result<Option<TypeIndex>> {
+fn parse_optional_type_index(buf: &mut ParseBuffer<'_>) -> Result<Option<TypeIndex>> {
     let index = buf.parse()?;
     if index == TypeIndex(0) || index == TypeIndex(0xffff) {
         Ok(None)
@@ -464,7 +486,7 @@ fn parse_string<'t>(leaf: u16, buf: &mut ParseBuffer<'t>) -> Result<RawString<'t
 }
 
 #[inline]
-fn parse_padding<'t>(buf: &mut ParseBuffer<'t>) -> Result<()> {
+fn parse_padding(buf: &mut ParseBuffer<'_>) -> Result<()> {
     while !buf.is_empty() && buf.peek_u8()? >= 0xf0 {
         let padding = buf.parse_u8()?;
         if padding > 0xf0 {
@@ -477,7 +499,7 @@ fn parse_padding<'t>(buf: &mut ParseBuffer<'t>) -> Result<()> {
 }
 
 // https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/pdbdump/pdbdump.cpp#L2417-L2456
-fn parse_unsigned<'t>(buf: &mut ParseBuffer<'t>) -> Result<u64> {
+fn parse_unsigned(buf: &mut ParseBuffer<'_>) -> Result<u64> {
     let leaf = buf.parse_u16()?;
     if leaf < LF_NUMERIC {
         // the u16 directly encodes a value
@@ -633,10 +655,7 @@ impl FieldAttributes {
 
     #[inline]
     pub fn is_intro_virtual(self) -> bool {
-        match self.method_properties() {
-            0x04 | 0x06 => true,
-            _ => false,
-        }
+        matches!(self.method_properties(), 0x04 | 0x06)
     }
 
     // TODO
@@ -779,10 +798,10 @@ impl PointerAttributes {
 
     /// Returns `true` if this points to a member (either data or function).
     pub fn pointer_to_member(self) -> bool {
-        match self.pointer_mode() {
-            PointerMode::Member | PointerMode::MemberFunction => true,
-            _ => false,
-        }
+        matches!(
+            self.pointer_mode(),
+            PointerMode::Member | PointerMode::MemberFunction
+        )
     }
 
     /// Returns `true` if this is a flat `0:32` pointer.
@@ -812,10 +831,10 @@ impl PointerAttributes {
 
     /// Is this a C++ reference, as opposed to a C pointer?
     pub fn is_reference(self) -> bool {
-        match self.pointer_mode() {
-            PointerMode::LValueReference | PointerMode::RValueReference => true,
-            _ => false,
-        }
+        matches!(
+            self.pointer_mode(),
+            PointerMode::LValueReference | PointerMode::RValueReference
+        )
     }
 
     /// The size of the pointer in bytes.
@@ -1105,3 +1124,26 @@ ParseBuf::from("\x03\x15\x77\x13\x00\x00\x23\x00\x00\x00\x02\x80\xbd\xda\x00\xf3
 ParseBuf::from("\x03\x15\xb7\x16\x00\x00\x23\x00\x00\x00\x28\x00\x00\xf1").as_bytes(),
 ParseBuf::from("\x03\x15\x14\x10\x00\x00\x23\x00\x00\x00\x55\x00\x00\xf1").as_bytes(),
 */
+
+#[test]
+fn kind_1609() {
+    let data = &[
+        9, 22, 0, 2, 0, 0, 22, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 6, 0, 72, 95, 115, 105, 122,
+        101, 0, 46, 63, 65, 85, 72, 95, 115, 105, 122, 101, 64, 64, 0,
+    ][..];
+
+    assert_eq!(
+        parse_type_data(&mut ParseBuffer::from(data)).expect("parse"),
+        TypeData::Class(ClassType {
+            kind: ClassKind::Struct,
+            count: 2,
+            properties: TypeProperties(512),
+            fields: Some(TypeIndex(0x1016)),
+            derived_from: None,
+            vtable_shape: None,
+            size: 6,
+            name: RawString::from("H_size"),
+            unique_name: Some(RawString::from(".?AUH_size@@")),
+        })
+    );
+}
